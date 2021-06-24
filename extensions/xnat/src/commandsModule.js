@@ -11,6 +11,13 @@ import queryAiaaSettings from './utils/IO/queryAiaaSettings';
 const actions = {};
 
 const definitions = {
+  xnatGetRootUrl: {
+    commandFn: () => {
+      return sessionMap.xnatRootUrl;
+    },
+    storeContexts: [],
+    options: {},
+  },
   xnatSetRootUrl: {
     commandFn: ({ url }) => {
       sessionMap.xnatRootUrl = url;
@@ -35,6 +42,13 @@ const definitions = {
     },
     storeContexts: [],
     options: { json: null, sessionVariables: null },
+  },
+  xnatGetExperimentID: {
+    commandFn: ({ SeriesInstanceUID }) => {
+      return sessionMap.getExperimentID(SeriesInstanceUID);
+    },
+    storeContexts: [],
+    options: { SeriesInstanceUID: null },
   },
   xnatCheckAndSetPermissions: {
     commandFn: checkAndSetPermissions,

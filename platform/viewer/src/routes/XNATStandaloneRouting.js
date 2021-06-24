@@ -58,9 +58,8 @@ class XNATStandaloneRouting extends Component {
       const parentProjectId = query.parentProjectId
         ? query.parentProjectId
         : projectId;
-
       if (parentProjectId) {
-        console.warn(
+        log.warn(
           `This experiment is shared view of ${experimentId} from ${parentProjectId}`
         );
       }
@@ -93,8 +92,7 @@ class XNATStandaloneRouting extends Component {
         });
 
         const jsonRequestUrl = `${rootUrl}xapi/viewer/projects/${projectId}/experiments/${experimentId}`;
-
-        console.log(jsonRequestUrl);
+        log.info(`jsonRequestUrl: ${jsonRequestUrl}`);
 
         // Define a request to the server to retrieve the study data
         // as JSON, given a URL that was in the Route
@@ -121,19 +119,16 @@ class XNATStandaloneRouting extends Component {
           }
 
           let jsonString = oReq.responseText;
-
           if (parentProjectId) {
-            console.warn(
-              `replacing ${parentProjectId} with ${projectId} so resources can be fetched`
+            log.warn(
+              `Replacing ${parentProjectId} with ${projectId} so resources can be fetched`
             );
             jsonString = jsonString.replace(
               new RegExp(parentProjectId, 'g'),
               projectId
             );
           }
-
           log.info(JSON.stringify(jsonString, null, 2));
-
           const data = JSON.parse(jsonString);
 
           commandsManager.runCommand('xnatSetSession', {
@@ -146,8 +141,6 @@ class XNATStandaloneRouting extends Component {
               parentProjectId,
             },
           });
-
-          console.warn(data);
 
           resolve({ studies: data.studies, studyInstanceUIDs: [] });
         });
@@ -168,14 +161,13 @@ class XNATStandaloneRouting extends Component {
         });
 
         const subjectExperimentListUrl = `${rootUrl}data/archive/projects/${projectId}/subjects/${subjectId}/experiments?format=json`;
-
-        console.log(subjectExperimentListUrl);
+        log.info(`subjectExperimentListUrl: ${subjectExperimentListUrl}`);
 
         _getJson(subjectExperimentListUrl).then(json => {
           // TODO -> Fetch each json.
           // Promise.all and combine JSON.
           // Load up viewer.
-          console.log(json);
+          log.info(json);
 
           const experimentList = json.ResultSet.Result;
           const results = [];
@@ -188,7 +180,7 @@ class XNATStandaloneRouting extends Component {
           }
 
           Promise.all(results).then(jsonFiles => {
-            console.log(jsonFiles);
+            log.info(jsonFiles);
 
             let studyList = {
               transactionId: subjectId,
@@ -213,30 +205,24 @@ class XNATStandaloneRouting extends Component {
               // TODO -> clean this
               studiesI[0].StudyDescription =
                 experimentList[i].label || experimentList[i].ID;
-
-              console.log(`Studies[${i}]`);
-
-              console.log(studiesI);
+              log.info(`Studies[${i}]`);
+              log.info(studiesI);
 
               studyList.studies = [...studyList.studies, ...studiesI];
             }
-
-            console.log(studyList);
+            log.info(studyList);
 
             if (parentProjectId) {
-              console.log(`replacing ${parentProjectId} with ${projectId}`);
+              log.info(`Replacing ${parentProjectId} with ${projectId}`);
 
               let jsonString = JSON.stringify(studyList);
-
               jsonString = jsonString.replace(
                 new RegExp(parentProjectId, 'g'),
                 projectId
               );
-
               studyList = JSON.parse(jsonString);
+              log.info(studyList);
             }
-
-            console.log(studyList);
 
             resolve({ studies: studyList.studies, studyInstanceUIDs: [] });
           });
@@ -253,20 +239,19 @@ class XNATStandaloneRouting extends Component {
       search = search.slice(1, search.length);
       const query = qs.parse(search);
 
+      // Grab the root URL, accounting for if we're in development mode
       let rootUrl = getRootUrl();
-
       if (process.env.NODE_ENV === 'development') {
-        console.info('XNATStandaloneRouting Development mode! .........');
+        log.info('XNATStandaloneRouting Development mode! .........');
         rootUrl = process.env.XNAT_PROXY;
         // Authenticate to XNAT
         const loggedIn = await isLoggedIn();
-        console.info('Logged in XNAT? ' + loggedIn);
+        log.info('Logged in XNAT? ' + loggedIn);
         if (!loggedIn) {
           await xnatAuthenticate();
         }
       }
-
-      console.log(`rootUrl: ${rootUrl}`);
+      log.info(`rootUrl: ${rootUrl}`);
 
       let {
         server,
@@ -338,9 +323,21 @@ const _mapStudiesToNewFormat = studies => {
   studyMetadataManager.purge();
 
   /* Map studies to new format, update metadata manager? */
+  const rootUrl = commandsManager.runCommand('xnatGetRootUrl');
   const uniqueStudyUIDs = new Set();
   const updatedStudies = studies.map(study => {
     const studyMetadata = new OHIFStudyMetadata(study, study.StudyInstanceUID);
+    // Set the wadoRoot if at least one series is associated with an experimentID
+    if (study.series.length >= 1) {
+      const seriesUid = study.series[0].SeriesInstanceUID;
+      const experimentId = commandsManager.runCommand('xnatGetExperimentID', {
+        SeriesInstanceUID: seriesUid,
+      });
+      if (experimentId) {
+        studyMetadata.getData().wadoRoot = `${rootUrl}xapi/dicomweb/session/${experimentId}`;
+      }
+    }
+    // studyMetadata.getData().wadoRoot = 'http://192.168.1.16/pacs/dicom-web';
 
     const sopClassHandlerModules =
       extensionManager.modules['sopClassHandlerModule'];
@@ -369,8 +366,7 @@ function _getJson(url) {
     const xhr = new XMLHttpRequest();
 
     xhr.onload = () => {
-      console.log(`GET ${url}... ${xhr.status}`);
-
+      log.info(`GET ${url}... ${xhr.status}`);
       resolve(xhr.response);
     };
 
@@ -420,7 +416,6 @@ function reassignInstanceUrls(studies, rootUrl) {
       });
     });
   });
-
 }
 
 async function updateMetaDataProvider(studies) {
